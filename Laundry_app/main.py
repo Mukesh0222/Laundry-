@@ -1,7 +1,6 @@
 import os
 import sys
 
-# Add the current directory to Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI, Request
@@ -24,7 +23,7 @@ from api.customers import router as customers_router
 from fastapi.middleware.cors import CORSMiddleware
 from api.staff import router as staff_router
 from dependencies.auth import get_current_user
-
+from api.otp import router as otp_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -63,7 +62,7 @@ app.include_router(pickups_deliveries_router, prefix=f"{settings.API_V1_STR}/pic
 app.include_router(staff_router, prefix="/api/v1/staff/orders", tags=["staff"])
 app.include_router(order_router, prefix="/api/v1/orders", tags=["orders"])
 app.include_router(auth_router, prefix="/api/v1", tags=["authentication"])
-
+app.include_router(otp_router)
 
 @app.get("/")
 def read_root():
