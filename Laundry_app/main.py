@@ -46,7 +46,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:8081", "http://192.168.1.3:8081", "http://localhost:5174", "http://192.168.1.8:5173", "http://192.168.1.16:5174",
-    "http://localhost:5175", "http://192.168.1.16:5175", "http://192.168.1.6:5173", "http://localhost:5173" ],  # Frontend URLs
+    "http://localhost:5175", "http://192.168.1.16:5175", "http://192.168.1.6:5173", "http://localhost:5173" , "https://laundry-8ey0.onrender.com",  # ✅ Added your Render URL
+        "http://laundry-8ey0.onrender.com" ],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
