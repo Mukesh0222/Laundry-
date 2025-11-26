@@ -94,26 +94,46 @@ class ProductName(str, Enum):
     STOLE = "Stole"
     MUFFLER = "Muffler"
 
+# class OrderItem(SQLModel, table=True):
+#     __tablename__ = "order_items"
+    
+#     order_item_id: Optional[int] = Field(default=None, primary_key=True)
+#     order_id: int = Field(foreign_key="orders.order_id")
+#     # category_name: str = Field(max_length=100)
+#     # product_name: str = Field(max_length=150)
+#     category_name: str = Field()
+#     product_name: str = Field()
+#     quantity: int = Field(default=1)
+#     service: str = Field()
+#     status: str = Field(sa_column=Column(String(250)))
+#     created_at: datetime = Field(default_factory=datetime.utcnow)
+#     updated_at: datetime = Field(default_factory=datetime.utcnow)
+#     created_by: Optional[str] = Field(default=None, max_length=150)
+#     updated_by: Optional[str] = Field(default=None, max_length=150)
+
+#     order: Optional["Order"] = Relationship(back_populates="items") 
+
+    
+#     __table_args__ = (
+#         UniqueConstraint('order_id', 'category_name', 'product_name', name='uq_order_item'),
+#     )
+
+
 class OrderItem(SQLModel, table=True):
     __tablename__ = "order_items"
     
     order_item_id: Optional[int] = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="orders.order_id")
-    # category_name: str = Field(max_length=100)
-    # product_name: str = Field(max_length=150)
-    category_name: str = Field()
-    product_name: str = Field()
+    category_name: str = Field(max_length=100)
+    product_name: str = Field(max_length=100)
     quantity: int = Field(default=1)
-    service: str = Field()
-    status: str = Field(sa_column=Column(String(250)))
+    service: str = Field(max_length=50)
+    status: str = Field(default="pending", max_length=50)
+    unit_price: float = Field(default=0.0)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     created_by: Optional[str] = Field(default=None, max_length=150)
     updated_by: Optional[str] = Field(default=None, max_length=150)
-
-    order: Optional["Order"] = Relationship(back_populates="items") 
-
     
-    __table_args__ = (
-        UniqueConstraint('order_id', 'category_name', 'product_name', name='uq_order_item'),
-    )
+    # ✅ FIXED: Removed cascade_delete
+    order: Optional["Order"] = Relationship(back_populates="items")
