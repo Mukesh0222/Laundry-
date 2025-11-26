@@ -1,5 +1,5 @@
 from sqlmodel import Session, select, func, and_, or_
-from typing import List, Tuple, Any, Dict
+from typing import List, Tuple, Dict, Any
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 from models.order import Order, OrderStatus, ServiceType
@@ -14,62 +14,44 @@ class DashboardService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_complete_dashboard(self, period_days: int = 30) -> Dict[str, Any]:
-        """Get complete dashboard data"""
-        try:
-            stats = self.get_dashboard_stats(period_days)
-            recent_orders = self.get_recent_orders(10)
-            service_distribution = self.get_service_distribution()
-            
-            return {
-                "stats": stats,
-                "recent_orders": recent_orders,
-                "service_distribution": service_distribution,
-                "period_days": period_days,
-                "last_updated": datetime.utcnow().isoformat()
-            }
-        except Exception as e:
-            print(f"Dashboard service error: {e}")
-            raise
-
     def get_dashboard_stats(self, period_days: int = 30) -> DashboardStats:
         """Get main dashboard statistics"""
         
-        # Total orders
+        
         total_orders = self.db.exec(select(func.count(Order.order_id))).first() or 0
         
-        # Total revenue
+        
         total_revenue_stmt = select(func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0)).select_from(OrderItem)
         total_revenue = self.db.exec(total_revenue_stmt).first() or 0.0
         
-        # Pending orders
+        
         pending_orders = self.db.exec(
             select(func.count(Order.order_id)).where(Order.status == OrderStatus.PENDING)
         ).first() or 0
         
-        # Completed orders
+        
         completed_orders = self.db.exec(
             select(func.count(Order.order_id)).where(Order.status == OrderStatus.COMPLETED)
         ).first() or 0
         
-        # Total customers
+        
         total_customers = self.db.exec(select(func.count(User.user_id))).first() or 0
         
-        # Monthly revenue (current month)
+        
         current_month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         monthly_revenue_stmt = select(func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0)).select_from(OrderItem).join(Order).where(Order.created_at >= current_month_start)
         monthly_revenue = self.db.exec(monthly_revenue_stmt).first() or 0.0
         
-        # Weekly revenue (last 7 days)
+        
         week_ago = datetime.now() - timedelta(days=7)
         weekly_revenue_stmt = select(func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0)).select_from(OrderItem).join(Order).where(Order.created_at >= week_ago)
         weekly_revenue = self.db.exec(weekly_revenue_stmt).first() or 0.0
         
-        # Calculate growth percentages (compared to previous period)
+        
         prev_period_start = datetime.now() - timedelta(days=period_days * 2)
         prev_period_end = datetime.now() - timedelta(days=period_days)
         
-        # Previous period revenue
+        
         prev_revenue_stmt = select(func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0)).select_from(OrderItem).join(Order).where(
             and_(
                 Order.created_at >= prev_period_start,
@@ -78,7 +60,7 @@ class DashboardService:
         )
         prev_revenue = self.db.exec(prev_revenue_stmt).first() or 0.0
         
-        # Previous period orders
+        
         prev_orders_stmt = select(func.count(Order.order_id)).where(
             and_(
                 Order.created_at >= prev_period_start,
@@ -87,7 +69,7 @@ class DashboardService:
         )
         prev_orders = self.db.exec(prev_orders_stmt).first() or 0
         
-        # Calculate growth percentages
+        
         revenue_growth = self._calculate_growth(total_revenue, prev_revenue)
         order_growth = self._calculate_growth(total_orders, prev_orders)
         
@@ -109,7 +91,7 @@ class DashboardService:
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
         
-        # Generate all dates in the range
+        
         date_labels = []
         revenue_data = []
         orders_data = []
@@ -121,7 +103,7 @@ class DashboardService:
             day_start = datetime.combine(current_date, datetime.min.time())
             day_end = datetime.combine(current_date, datetime.max.time())
             
-            # Daily revenue
+            
             daily_revenue_stmt = select(func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0)).select_from(OrderItem).join(Order).where(
                 and_(
                     Order.created_at >= day_start,
@@ -131,7 +113,7 @@ class DashboardService:
             daily_revenue = self.db.exec(daily_revenue_stmt).first() or 0.0
             revenue_data.append(float(daily_revenue))
             
-            # Daily orders
+            
             daily_orders_stmt = select(func.count(Order.order_id)).where(
                 and_(
                     Order.created_at >= day_start,
@@ -156,11 +138,11 @@ class DashboardService:
         
         service_stats = []
         for service_type in ServiceType:
-            # Count orders by service type
+            
             service_count_stmt = select(func.count(Order.order_id)).where(Order.service == service_type)
             service_count = self.db.exec(service_count_stmt).first() or 0
             
-            # Revenue by service type
+            
             service_revenue_stmt = select(func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0)).select_from(OrderItem).join(Order).where(Order.service == service_type)
             service_revenue = self.db.exec(service_revenue_stmt).first() or 0.0
             
@@ -177,17 +159,17 @@ class DashboardService:
 
     def get_category_stats(self) -> List[CategoryWiseStats]:
         """Get category-wise statistics"""
-        # Total items across all categories
+        
         total_items_stmt = select(func.sum(OrderItem.quantity))
         total_items = self.db.exec(total_items_stmt).first() or 1
         
         category_stats = []
         for category in CategoryName:
-            # Items count by category
+            
             category_count_stmt = select(func.coalesce(func.sum(OrderItem.quantity), 0)).where(OrderItem.category_name == category)
             category_count = self.db.exec(category_count_stmt).first() or 0
             
-            # Revenue by category
+            
             category_revenue_stmt = select(func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0)).where(OrderItem.category_name == category)
             category_revenue = self.db.exec(category_revenue_stmt).first() or 0.0
             
@@ -200,42 +182,61 @@ class DashboardService:
                 percentage=round(percentage, 2)
             ))
         
-        # Filter out categories with zero items
+        
         return [stat for stat in category_stats if stat.total_items > 0]
 
-    def get_recent_orders(self, limit: int = 10) -> List[RecentOrder]:
-        """Get recent orders with customer details"""
-        stmt = (
-            select(Order, User)
-            .join(User, Order.user_id == User.user_id)
-            .order_by(Order.created_at.desc())
-            .limit(limit)
-        )
-        
-        results = self.db.exec(stmt).all()
-        recent_orders = []
-        
-        for order, user in results:
-            # Get item count for this order
-            item_count_stmt = select(func.sum(OrderItem.quantity)).where(OrderItem.order_id == order.order_id)
-            item_count = self.db.exec(item_count_stmt).first() or 0
+    def get_recent_orders(self, limit: int = 10) -> Dict[str, Any]:
+        """Get recent orders for dashboard"""
+        try:
+            print(f"DashboardService: Fetching {limit} recent orders")
             
-            # Get total amount for this order
-            order_amount_stmt = select(func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0)).where(OrderItem.order_id == order.order_id)
-            order_amount = self.db.exec(order_amount_stmt).first() or 0.0
+            # Get recent orders
+            statement = select(Order).order_by(Order.created_at.desc()).limit(limit)
+            recent_orders = self.db.exec(statement).all()
             
-            recent_orders.append(RecentOrder(
-                order_id=order.order_id,
-                token_no=order.Token_no,
-                customer_name=user.name,
-                service_type=order.service.value,
-                status=order.status.value,
-                total_amount=float(order_amount),
-                created_at=order.created_at,
-                item_count=item_count
-            ))
-        
-        return recent_orders
+            print(f"DashboardService: Found {len(recent_orders)} orders")
+            
+            orders_response = []
+            for order in recent_orders:
+                try:
+                    # Get user details
+                    user = self.db.get(User, order.user_id)
+                    
+                    # Get order items
+                    items_statement = select(OrderItem).where(OrderItem.order_id == order.order_id)
+                    order_items = self.db.exec(items_statement).all()
+                    
+                    total_items = len(order_items)
+                    total_quantity = sum(item.quantity for item in order_items)
+                    
+                    order_data = {
+                        "order_id": order.order_id,
+                        "Token_no": order.Token_no,
+                        "customer_name": user.name if user else "Unknown",
+                        "customer_mobile": user.mobile_no if user else "Unknown",
+                        "service": order.service,
+                        "status": order.status,
+                        "total_items": total_items,
+                        "total_quantity": total_quantity,
+                        "created_at": order.created_at.isoformat() if order.created_at else None,
+                        "user_id": order.user_id
+                    }
+                    
+                    orders_response.append(order_data)
+                    
+                except Exception as order_error:
+                    print(f"DashboardService: Error processing order {order.order_id}: {str(order_error)}")
+                    continue
+            
+            return {
+                "success": True,
+                "recent_orders": orders_response,
+                "total_count": len(orders_response)
+            }
+            
+        except Exception as e:
+            print(f"DashboardService Error: {str(e)}")
+            raise
 
     def get_top_customers(self, limit: int = 5) -> List[TopCustomer]:
         """Get top customers by order count and spending"""
@@ -272,11 +273,11 @@ class DashboardService:
 
     def get_quick_stats(self) -> QuickStats:
         """Get quick stats for dashboard cards"""
-        # Today's stats
+        
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
         
-        # Today's orders
+        
         today_orders_stmt = select(func.count(Order.order_id)).where(
             and_(
                 Order.created_at >= today_start,
@@ -285,7 +286,7 @@ class DashboardService:
         )
         today_orders = self.db.exec(today_orders_stmt).first() or 0
         
-        # Today's revenue
+        
         today_revenue_stmt = select(func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0)).select_from(OrderItem).join(Order).where(
             and_(
                 Order.created_at >= today_start,
@@ -294,7 +295,7 @@ class DashboardService:
         )
         today_revenue = self.db.exec(today_revenue_stmt).first() or 0.0
         
-        # This week's revenue
+        
         week_start = datetime.now() - timedelta(days=datetime.now().weekday())
         week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
         week_revenue_stmt = select(func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0)).select_from(OrderItem).join(Order).where(
@@ -302,7 +303,7 @@ class DashboardService:
         )
         week_revenue = self.db.exec(week_revenue_stmt).first() or 0.0
         
-        # Average order value
+        
         total_orders_stmt = select(func.count(Order.order_id))
         total_orders = self.db.exec(total_orders_stmt).first() or 1
         total_revenue_stmt = select(func.coalesce(func.sum(OrderItem.quantity * OrderItem.unit_price), 0))

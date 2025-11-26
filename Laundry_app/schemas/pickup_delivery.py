@@ -51,7 +51,7 @@ class PickupDeliveryResponse(PickupDeliveryBase):
 
     @validator('status', pre=True)
     def validate_status(cls, v):
-        # Convert database value to expected case
+        
         status_map = {
             'pending': 'PENDING',
             'scheduled': 'SCHEDULED', 

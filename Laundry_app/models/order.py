@@ -8,6 +8,9 @@ class OrderStatus(str, Enum):
     PENDING = "pending"
     CONFIRMED = "confirmed"
     IN_PROGRESS = "in_progress"
+    PROCESSED = "processed"
+    READY = "ready"  
+    PICKED_UP  = "picked_up"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     PICKED = "picked"
@@ -28,13 +31,21 @@ class Order(SQLModel, table=True):
     # service: ServiceType = Field(sa_column=Column(MySQLEnum(ServiceType)))  
     service: str = Field()
     status: str = Field(default="pending") 
-    # status: OrderStatus = Field(sa_column=Column(MySQLEnum(OrderStatus)))
+    
+    picked_at: Optional[datetime] = Field(default=None)
+    delivered_at: Optional[datetime] = Field(default=None)
+    cancelled_at: Optional[datetime] = Field(default=None)
+    
+    picked_by: Optional[str] = Field(default=None, max_length=150)
+    delivered_by: Optional[str] = Field(default=None, max_length=150)
+    cancelled_by: Optional[str] = Field(default=None, max_length=150)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     created_by: Optional[str] = Field(default=None, max_length=150)
     updated_by: Optional[str] = Field(default=None, max_length=150)
 
-    #  Relationships
-    user: Optional["User"] = Relationship(back_populates="orders")  #  Order-User relationship
-    address: Optional["Address"] = Relationship(back_populates="orders")  #  Order-Address relationship
-    items: List["OrderItem"] = Relationship(back_populates="order", cascade_delete=True)  #  Order-OrderItem relationship
+   
+    user: Optional["User"] = Relationship(back_populates="orders")  
+    address: Optional["Address"] = Relationship(back_populates="orders")  
+    items: List["OrderItem"] = Relationship(back_populates="order", cascade_delete=True) 
+    # feedbacks: List["Feedback"] = Relationship(back_populates="order")

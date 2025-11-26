@@ -65,7 +65,7 @@ class CRUDAddress:
     
     def create(self, db: Session, address_data: dict) -> Optional[Address]:
         try:
-            # If this is set as default, remove default from other addresses
+           
             if address_data.get('is_default'):
                 self.remove_default_from_others(db, address_data['user_id'])
             
@@ -99,7 +99,7 @@ class CRUDAddress:
         
         update_data = address_data.dict(exclude_unset=True)
         
-        # If setting as default, remove default from others
+        
         if update_data.get('is_default'):
             self.remove_default_from_others(db, address.user_id)
         
@@ -134,5 +134,5 @@ class CRUDAddress:
         db.commit()
         return True
 
-# Create instance
+
 crud_address = CRUDAddress()

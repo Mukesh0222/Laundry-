@@ -2,6 +2,9 @@ from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, List
 from datetime import datetime
 
+from pydantic import BaseModel
+from typing import Optional
+
 class Address(SQLModel, table=True):
     __tablename__ = "addresses"
     
@@ -22,7 +25,22 @@ class Address(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = Field(default_factory=datetime.now)
     
-    # Relationship
+    
     user: Optional["User"] = Relationship(back_populates="addresses")
 
-    orders: List["Order"] = Relationship(back_populates="address")  #  Address-Order relationship
+    orders: List["Order"] = Relationship(back_populates="address")  
+
+
+    class AddressResponse(BaseModel):
+        id: int
+        user_id: int
+        address_line1: str
+        address_line2: Optional[str] = None
+        city: str
+        state: str
+        postal_code: str
+        country: str = "India"
+        is_primary: bool = False
+        
+        class Config:
+            from_attributes = True

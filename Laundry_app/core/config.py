@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Laundry Management System"
     API_V1_STR: str = "/api/v1"
     
-    # Database
+    
     MYSQL_USER: str = os.getenv("MYSQL_USER", "root")
     MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "")
     MYSQL_HOST: str = os.getenv("MYSQL_HOST", "localhost")
@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     
     DATABASE_URL: Optional[str] = None
     
-    # JWT
+    
     SECRET_KEY: str = "your-secret-key-change-in-production" 
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     class Config:
         case_sensitive = True
 
-    # OTP
+    
     OTP_EXPIRE_MINUTES: int = 10
     
     class Config:

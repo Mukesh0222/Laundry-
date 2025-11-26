@@ -12,7 +12,7 @@ class DashboardStats(BaseModel):
     monthly_revenue: float
     weekly_revenue: float
     
-    # Growth percentages
+    
     revenue_growth: float = 0.0
     order_growth: float = 0.0
     customer_growth: float = 0.0
@@ -21,7 +21,7 @@ class DashboardStats(BaseModel):
         arbitrary_types_allowed = True
 
 class RevenueChartData(BaseModel):
-    labels: List[str]  # Dates or periods
+    labels: List[str]  
     revenue: List[float]
     orders: List[int]
 

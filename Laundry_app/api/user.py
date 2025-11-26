@@ -21,13 +21,13 @@ def create_user(
     """
     Create a new user (Admin/Staff only)
     """
-    # Check permissions - only admin/staff can create users
+    
     if current_user.role not in ["staff", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Only staff and admin can create users."
         )
-    # Check if user already exists with same mobile number
+    
     existing_mobile = crud_user.get_by_mobile(db, user_data.mobile_no)
     if existing_mobile:
         raise HTTPException(
@@ -35,14 +35,14 @@ def create_user(
             detail="Mobile number already registered"
         )
     
-    # Hash the password before saving
+   
     hashed_password = get_password_hash(user_data.password)
     
-    # Create user data dictionary
+    
     user_dict = user_data.dict()
     user_dict["password"] = hashed_password
     
-    # Create the user
+    
     user = crud_user.create(db, user_dict)
     
     if not user:
@@ -184,26 +184,26 @@ def update_user(
     """
     Update user information
     """
-    # Check permissions
+    
     if current_user.role not in ["staff", "admin"] and current_user.user_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update your own profile"
         )
     
-    # Convert to dictionary - use model_dump() for Pydantic v2
+    
     try:
         update_data = user_data.model_dump(exclude_unset=True, exclude_none=True)
     except AttributeError:
-        # Fallback for older Pydantic versions
+        
         update_data = user_data.dict(exclude_unset=True, exclude_none=True)
     
-    # Handle password update if provided
+    
     if 'password' in update_data and update_data['password']:
         update_data['hashed_password'] = get_password_hash(update_data['password'])
         del update_data['password']
     
-    # Check if mobile number already exists
+    
     if 'mobile_no' in update_data and update_data['mobile_no']:
         existing_mobile = crud_user.get_by_mobile(db, update_data['mobile_no'])
         if existing_mobile and existing_mobile.user_id != user_id:
@@ -212,7 +212,7 @@ def update_user(
                 detail="Mobile number already registered by another user"
             )
     
-    # Check if email already exists
+    
     if 'email' in update_data and update_data['email']:
         existing_email = crud_user.get_by_email(db, update_data['email'])
         if existing_email and existing_email.user_id != user_id:
@@ -221,7 +221,7 @@ def update_user(
                 detail="Email already registered by another user"
             )
     
-    # Prevent customers from changing their role
+    
     if current_user.role == "customer" and 'role' in update_data:
         del update_data['role']
     

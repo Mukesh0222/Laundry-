@@ -39,7 +39,7 @@ def read_order_item(
     if not item:
         raise HTTPException(status_code=404, detail="Order item not found")
     
-    # Check if user has access to this order item
+    
     from models.order import Order
     order = db.get(Order, item.order_id)
     if current_user.role not in ["staff", "admin"] and order.user_id != current_user.user_id:

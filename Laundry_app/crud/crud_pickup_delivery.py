@@ -43,7 +43,7 @@ class CRUDPickupDelivery:
         if pd:
             update_data = pd_in.dict(exclude_unset=True)
             
-            #  Auto-update timestamps based on status changes
+            
             if 'status' in update_data:
                 new_status = update_data['status']
                 if new_status == ServiceStatus.IN_PROGRESS and not pd.pickup_at:
@@ -58,7 +58,7 @@ class CRUDPickupDelivery:
             for field, value in update_data.items():
                 setattr(pd, field, value)
             
-            pd.pickup_update_at = datetime.utcnow()  #  Always update this timestamp
+            pd.pickup_update_at = datetime.utcnow()  
             db.add(pd)
             db.commit()
             db.refresh(pd)

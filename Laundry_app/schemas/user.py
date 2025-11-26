@@ -99,6 +99,22 @@ class UserLogin(BaseModel):
             raise ValueError('Mobile number must be exactly 10 digits')
         return v
     
+class staffLogin(BaseModel):
+    # name: Optional[str] = None 
+    mobile_no: Optional[str] = None
+    password: Optional[str] = None
+    role: Optional[str] = None
+    
+
+    @field_validator('mobile_no')
+    @classmethod
+    def validate_mobile_no(cls, v):
+        if not v:
+            raise ValueError('Mobile number is required')
+        if not re.match(r'^\d{10}$', v):
+            raise ValueError('Mobile number must be exactly 10 digits')
+        return v
+    
 class Token(BaseModel):
     access_token: str
     token_type: str

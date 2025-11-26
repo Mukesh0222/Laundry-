@@ -9,7 +9,7 @@ class AddressBase(BaseModel):
     address_line1: str
     address_line2: Optional[str] = None
     city: str
-    state: str
+    state: Optional[str] = None
     pincode: str
     mobile_no: Optional[str] = None
 

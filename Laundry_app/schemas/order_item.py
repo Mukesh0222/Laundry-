@@ -7,14 +7,14 @@ class OrderItemBase(BaseModel):
     category_name: str
     product_name: str
     quantity: int 
-    service: ServiceType
+    service: str
     status: Optional[OrderItemStatus] = OrderItemStatus.PROCESSED
 
     @field_validator('category_name')
     def validate_category_name(cls, v):
         if not v or not v.strip():
             raise ValueError('Category name is required')
-        # Convert enum names to display names if needed
+        
         v = v.strip()
         category_mapping = {
             'MENS_CLOTHING': "Men's Clothing",
@@ -29,10 +29,10 @@ class OrderItemBase(BaseModel):
     def validate_product_name(cls, v):
         if not v or not v.strip():
             raise ValueError('Product name is required')
-        # Convert enum names to display names if needed
+        
         v = v.strip()
         product_mapping = {
-            # Men's Clothing
+            
             'T_SHIRT': "T-Shirt",
             'SHIRT': "Shirt", 
             'JEANS': "Jeans",
@@ -44,7 +44,7 @@ class OrderItemBase(BaseModel):
             'JACKET': "Jacket",
             'SWEATER': "Sweater",
             
-            # Women's Clothing
+            
             'SAREE': "Saree",
             'KURTI': "Kurti",
             'DRESS': "Dress",
@@ -56,7 +56,7 @@ class OrderItemBase(BaseModel):
             'DUPATTA': "Dupatta",
             'NIGHT_DRESS': "Night Dress",
             
-            # Kids Clothing
+            
             'KIDS_TSHIRT': "Kids T-shirt",
             'KIDS_SHORTS': "Kids Shorts",
             'SCHOOL_UNIFORM': "School Uniform",
@@ -68,7 +68,7 @@ class OrderItemBase(BaseModel):
             'KIDS_JACKET': "Kids Jacket",
             'KIDS_SWEATER': "Kids Sweater",
             
-            # House Holds
+            
             'BEDSHEET': "Bedsheet",
             'PILLOW_COVER': "Pillow Cover",
             'CURTAIN': "Curtain",
@@ -80,7 +80,7 @@ class OrderItemBase(BaseModel):
             'CUSHION_COVER': "Cushion Cover",
             'MATTRESS_COVER': "Mattress Cover",
             
-            # Others
+            
             'BAG': "Bag",
             'CAP': "Cap",
             'SCARF': "Scarf",

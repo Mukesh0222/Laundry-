@@ -37,3 +37,5 @@ class User(SQLModel, table=True):
     addresses: List["Address"] = Relationship(back_populates="user", cascade_delete=True)
     
     orders: List["Order"] = Relationship(back_populates="user")  
+
+    # feedbacks: List["Feedback"] = Relationship(back_populates="user")

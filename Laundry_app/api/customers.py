@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
+from sqlalchemy.orm import joinedload
 from typing import List
 
 from db.session import get_db
@@ -10,16 +11,17 @@ from datetime import timedelta
 from core.config import settings
 from schemas.address import AddressCreate, AddressUpdate, AddressResponse
 from Laundry_app.crud.crud_address import crud_address
+from models.user import User
 
 router = APIRouter()
 
-#  CUSTOMER REGISTRATION (POST) - Public endpoint
+
 @router.post("/register", response_model=CustomerResponse)
 def register_customer(
     customer_data: CustomerCreate, 
     db: Session = Depends(get_db)
 ):
-    # Check if customer already exists with same mobile number
+    
     existing_mobile = crud_user.get_by_mobile(db, customer_data.mobile_no)
     if existing_mobile:
         raise HTTPException(
@@ -27,7 +29,7 @@ def register_customer(
             detail="Mobile number already registered"
         )
     
-    # Check if email already exists (if provided)
+    
     if customer_data.email:
         existing_email = crud_user.get_by_email(db, customer_data.email)
         if existing_email:
@@ -36,19 +38,24 @@ def register_customer(
                 detail="Email already registered"
             )
     
-    # Hash the password
+    
     hashed_password = get_password_hash(customer_data.password)
     
     image_url = customer_data.image_url or "/static/images/default-avatar.jpg"
 
-    # Create customer data with role="customer"
+    
     customer_dict = customer_data.dict()
     customer_dict["password"] = hashed_password
-    customer_dict["role"] = "customer"  # Always set role as customer
+    customer_dict["role"] = "customer"  
     customer_dict["status"] = "active"
     customer_dict["image_url"] = image_url
 
-    # Create the customer
+    
+    if not customer_dict.get("email"):
+        customer_dict["email"] = f"{customer_data.mobile_no}@laundry.customer.com"
+        print(f" Set default email: {customer_dict['email']}")
+
+    
     customer = crud_user.create(db, customer_dict)
     
     if not customer:
@@ -111,42 +118,78 @@ def register_customer(
 #         "customer": CustomerResponse.from_orm(customer)
 #     }
 
-#  GET ALL CUSTOMERS (GET) - Admin/Staff only
+
 @router.get("/", response_model=List[CustomerResponse])
 def get_customers(
     skip: int = 0, 
-    limit: int = 100, 
+    limit: int = 100,
+    search: str = None,
     db: Session = Depends(get_db)
 ):
-    """
-    Get all customers (Admin/Staff only)
-    """
-    from sqlmodel import select
-    from models.user import User
-    
-    # Get only customers (role = 'customer')
-    statement = select(User).where(User.role == "customer").offset(skip).limit(limit)
-    customers = db.exec(statement).all()
-    return customers
+    try:
+        from models.user import User
+        from models.address import Address 
+        
+        print(f" Fetching customers - skip: {skip}, limit: {limit}, search: {search}")
+        
+        
+        query = db.query(User).filter(User.role == "customer").options(
+            joinedload(User.addresses)  
+        )
+        
+       
+        if search and search.strip():
+            search_term = f"%{search.strip()}%"
+            query = query.filter(
+                (User.name.ilike(search_term)) | 
+                (User.mobile_no.ilike(search_term)) |
+                (User.email.ilike(search_term))
+            )
+        
+        
+        total = query.count()
+        
+        
+        customers = query.offset(skip).limit(limit).all()
+        
+        print(f" Found {len(customers)} customers with addresses")
+        
+        for customer in customers:
+            for address in customer.addresses:
+                if address.pincode and len(str(address.pincode)) != 6:
+                    print(f" Fixing pincode for customer {customer.user_id}, address {address.address_id}: {address.pincode}")
+                   
+                    address.pincode = str(address.pincode).zfill(6)
 
-#  GET CUSTOMER BY ID (GET) - Admin/Staff or own profile
+        return customers
+        
+    except Exception as e:
+        print(f" Database error: {str(e)}")
+        import traceback
+        print(f" Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error: {str(e)}"
+        )
+    
+
 @router.get("/{customer_id}", response_model=CustomerResponse)
 def get_customer(
     customer_id: int, 
     db: Session = Depends(get_db)
 ):
     """
-    Get customer by ID
+    Get customer by ID with addresses
     """
-    customer = crud_user.get_by_id(db, customer_id)
-    if not customer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Customer not found"
-        )
+    from models.address import Address
+    from sqlalchemy.orm import joinedload
     
-    # Check if the user is actually a customer
-    if customer.role.lower()  != "customer":
+    customer = db.query(User).options(joinedload(User.addresses)).filter(
+        User.id == customer_id,
+        User.role == "customer"
+    ).first()
+    
+    if not customer:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Customer not found"
@@ -163,7 +206,7 @@ def update_customer(
 ):
     """Update customer profile"""
     try:
-        # Get user by ID
+        
         customer = crud_user.get_by_id(db, customer_id)
         if not customer:
             raise HTTPException(
@@ -171,14 +214,14 @@ def update_customer(
                 detail="Customer not found"
             )
         
-        # Check if the user is actually a customer
+        
         if customer.role.lower()  != "customer":
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Customer not found"
             )
         
-        # Validate status value
+        
         valid_statuses = ['active', 'inactive', 'suspended']
         if customer_data.status and customer_data.status not in valid_statuses:
             raise HTTPException(
@@ -186,7 +229,7 @@ def update_customer(
                 detail=f"Status must be one of: {', '.join(valid_statuses)}"
             )
         
-        # Update customer
+        
         updated_customer = crud_user.update(db, customer_id, customer_data)
         if not updated_customer:
             raise HTTPException(
@@ -233,7 +276,7 @@ def update_customer(
 #     updated_customer = crud_user.update(db, customer_id, customer_data)
 #     return updated_customer
 
-#  DELETE CUSTOMER (DELETE) - Admin/Staff only
+
 @router.delete("/{customer_id}")
 def delete_customer(
     customer_id: int, 
@@ -249,14 +292,14 @@ def delete_customer(
             detail="Customer not found"
         )
     
-    # Check if the user is actually a customer
+    
     if customer.role.lower()  != "customer":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Customer not found"
         )
     
-    # Soft delete - set status to inactive
+    
     customer.status = "inactive"
     db.add(customer)
     db.commit()
@@ -267,7 +310,7 @@ def delete_customer(
 # ADDRESS MANAGEMENT ENDPOINTS - Add these at the end of your file
 # ============================================================================
 
-#  ADD ADDRESS FOR CUSTOMER
+
 @router.post("/{customer_id}/addresses", response_model=AddressResponse)
 def create_customer_address(
     customer_id: int,
@@ -275,7 +318,7 @@ def create_customer_address(
     db: Session = Depends(get_db)
 ):
     """Create a new address for customer"""
-    # Check if customer exists
+    
     customer = crud_user.get_by_id(db, customer_id)
     if not customer or customer.role.lower()  != "customer":
         raise HTTPException(
@@ -283,7 +326,7 @@ def create_customer_address(
             detail="Customer not found"
         )
     
-    # Create address
+    
     address_dict = address_data.dict()
     address_dict["user_id"] = customer_id
     
@@ -296,14 +339,14 @@ def create_customer_address(
     
     return address
 
-#  GET ALL ADDRESSES OF CUSTOMER
+
 @router.get("/{customer_id}/addresses", response_model=List[AddressResponse])
 def get_customer_addresses(
     customer_id: int,
     db: Session = Depends(get_db)
 ):
     """Get all addresses of a customer"""
-    # Check if customer exists
+    
     customer = crud_user.get_by_id(db, customer_id)
     if not customer or customer.role.lower() != "customer":
         raise HTTPException(
@@ -314,7 +357,7 @@ def get_customer_addresses(
     addresses = crud_address.get_by_user_id(db, customer_id)
     return addresses
 
-#  GET SPECIFIC ADDRESS
+
 @router.get("/{customer_id}/addresses/{address_id}", response_model=AddressResponse)
 def get_customer_address(
     customer_id: int,
@@ -331,7 +374,7 @@ def get_customer_address(
     
     return address
 
-#  UPDATE ADDRESS
+
 @router.put("/{customer_id}/addresses/{address_id}", response_model=AddressResponse)
 def update_customer_address(
     customer_id: int,
@@ -356,7 +399,7 @@ def update_customer_address(
     
     return updated_address
 
-#  DELETE ADDRESS
+
 @router.delete("/{customer_id}/addresses/{address_id}")
 def delete_customer_address(
     customer_id: int,
@@ -380,28 +423,28 @@ def delete_customer_address(
     
     return {"message": "Address deleted successfully"}
 
-#  GET DEFAULT ADDRESS
-@router.get("/{customer_id}/addresses/default", response_model=AddressResponse)
-def get_default_address(
-    customer_id: int,
-    db: Session = Depends(get_db)
-):
-    """Get customer's default address"""
-    print(f"DEBUG: Looking for customer {customer_id}")
-    customer = crud_user.get_by_id(db, customer_id)
-    if not customer or customer.role.lower() != "customer":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Customer not found"
-        )
+
+# @router.get("/{customer_id}/addresses/default", response_model=AddressResponse)
+# def get_default_address(
+#     customer_id: int,
+#     db: Session = Depends(get_db)
+# ):
+#     """Get customer's default address"""
+#     print(f"DEBUG: Looking for customer {customer_id}")
+#     customer = crud_user.get_by_id(db, customer_id)
+#     if not customer or customer.role.lower() != "customer":
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="Customer not found"
+#         )
     
-    default_address = crud_address.get_default_address(db, customer_id)
-    print(f"DEBUG: Found address: {default_address}")
+#     default_address = crud_address.get_default_address(db, customer_id)
+#     print(f"DEBUG: Found address: {default_address}")
     
-    if not default_address:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No default address found"
-        )
+#     if not default_address:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="No default address found"
+#         )
     
-    return default_address
+#     return default_address

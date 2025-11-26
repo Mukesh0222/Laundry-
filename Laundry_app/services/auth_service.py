@@ -25,7 +25,7 @@ class AuthService:
     
     def generate_and_save_otp(self, db: Session, user: User) -> str:
         otp = generate_otp()
-        # In a real application, you would send this OTP via email/SMS
+        
         user.verified_otp = otp
         db.add(user)
         db.commit()

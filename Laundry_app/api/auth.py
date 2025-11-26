@@ -3,24 +3,27 @@ from sqlmodel import Session, select
 from datetime import datetime, timedelta
 
 from db.session import get_db
-from schemas.user import UserLogin, Token, UserCreate, UserResponse, OTPVerify, PasswordReset
+from schemas.user import UserLogin, staffLogin, Token, UserCreate, UserResponse, OTPVerify, PasswordReset
 from Laundry_app.crud.crud_user import crud_user
 from core.security import create_access_token, verify_password, generate_otp, verify_token, get_password_hash
 from core.config import settings
+# Fix the import path - use utils instead of utils.otp_utils
 from utils.otp_utils import generate_otp, store_otp_in_db, verify_otp_in_db, send_otp_via_sms, clear_otp_from_db
 from models.user import User
 from core.security import create_access_token
 
 router = APIRouter()
 
+print(" DEBUG: auth.py loaded successfully")
+
 @router.post("/login", response_model=dict)
 def login(user_data: UserLogin, db: Session = Depends(get_db)):
     """Login user - if mobile provided, check OTP status; if verified, auto-login"""
-    # If mobile number provided - OTP flow (passwordless)
+    
     if user_data.mobile_no:
         print(f"OTP login attempt for mobile: {user_data.mobile_no}")
         
-        # Check if user exists with this mobile
+       
         user = crud_user.get_by_mobile(db, user_data.mobile_no)
         print(f"User found: {user}")
 
@@ -30,7 +33,7 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
             user_role = user_data.role if user_data.role else "customer"
             user_name = user_data.name if user_data.name else f"User_{user_data.mobile_no}"
 
-            # Create new user directly using SQLModel (bypass UserCreate schema)
+            
             from models.user import User
             db_user = User(
                 name=user_name,
@@ -48,11 +51,16 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
         else:
             print(f"Existing user found: {user.name} (ID: {user.user_id})")
         
-            #  CHECK IF USER IS OTP VERIFIED (AUTO-LOGIN)
-            if user.verified_otp:  # Check if OTP was previously verified
+            if user.status != "active":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Your account is inactive. Please contact administrator."
+                )
+            
+            if user.verified_otp:  
                 print(f" User {user.mobile_no} is OTP verified - AUTO LOGIN")
                 
-                # Generate token for auto-login
+                
                 access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
                 access_token = create_access_token(
                     subject=user.user_id, expires_delta=access_token_expires
@@ -66,20 +74,20 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
                     "name": user.name,
                     "role": user.role,
                     "mobile_no": user.mobile_no,
-                    "auto_login": True  # Indicate auto-login
+                    "auto_login": True  
                 }
         
-        #  If not verified or new user, send OTP
+        
         if user.status != "active":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Account is inactive"
+                detail="Account is inactive. Please contact administrator."
             )  
         
-        # Generate and send OTP (no password required)
+        
         otp = generate_otp()
-        store_otp_in_db(user_data.mobile_no, otp, db)  # Save OTP to database
-        send_otp_via_sms(user_data.mobile_no, otp)  # Send SMS
+        store_otp_in_db(user_data.mobile_no, otp, db)  
+        send_otp_via_sms(user_data.mobile_no, otp)  
         
         return {
             "message": "OTP sent to mobile number",
@@ -87,14 +95,14 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
             "next_step": "verify_otp",
             "role": user.role,
             "user_id": user.user_id,
-            "auto_login": False  #  OTP required
+            "auto_login": False  
         }
     
-    # If name provided - password login (traditional)
+    
     elif user_data.name and user_data.password:
         print(f"Password login attempt for user: {user_data.name}")
         
-        # Check if password is provided
+        
         if not user_data.password:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -111,7 +119,7 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
         if user.status != "active":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Account is inactive"
+                detail="Account is inactive. Please contact administrator."
             )
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
@@ -131,6 +139,92 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Either mobile number (for OTP) or name with password must be provided"
         )
+    
+
+# staff login
+# staff login only - mobile_no + password
+# @router.post("/staff_login", response_model=dict)
+# def staff_login(user_data: staffLogin, db: Session = Depends(get_db)):
+#     """STAFF ONLY login - mobile + password required"""
+    
+#     #  VALIDATE: Must have both mobile and password
+#     if not user_data.mobile_no:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail="Mobile number is required for staff login"
+#         )
+    
+#     if not user_data.password:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail="Password is required for staff login"
+#         )
+    
+#     print(f" STAFF login attempt for mobile: {user_data.mobile_no}")
+    
+#     try:
+#         # Check if user exists with this mobile
+#         user = crud_user.get_by_mobile(db, user_data.mobile_no)
+        
+#         if not user:
+#             print(f" No user found with mobile: {user_data.mobile_no}")
+#             #  BETTER ERROR: Suggest creating staff account
+#             raise HTTPException(
+#                 status_code=status.HTTP_401_UNAUTHORIZED,
+#                 detail=f"No staff account found with mobile {user_data.mobile_no}. Please contact admin to create staff account."
+#             )
+        
+#         print(f" User found: {user.name} (Role: {user.role}, Status: {user.status})")
+        
+#         # Verify password
+#         if not verify_password(user_data.password, user.password):
+#             print(f" Password verification failed for user: {user.name}")
+#             raise HTTPException(
+#                 status_code=status.HTTP_401_UNAUTHORIZED,
+#                 detail="Invalid password"
+#             )
+        
+#         # Check if user is staff/admin
+#         if user.role not in ["staff", "admin"]:
+#             print(f" User role not allowed: {user.role}")
+#             raise HTTPException(
+#                 status_code=status.HTTP_403_FORBIDDEN,
+#                 detail=f"Account role '{user.role}' cannot login here. Use customer login."
+#             )
+        
+#         if user.status != "active":
+#             print(f" User account inactive: {user.name}")
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail="Staff account is inactive. Please contact admin."
+#             )
+        
+#         print(f"STAFF login successful: {user.name} (Role: {user.role})")
+        
+#         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+#         access_token = create_access_token(
+#             subject=user.user_id, expires_delta=access_token_expires
+#         )
+        
+#         return {
+#             "access_token": access_token, 
+#             "token_type": "bearer",
+#             "message": "Staff login successful",
+#             "user_id": user.user_id,
+#             "name": user.name,
+#             "role": user.role,
+#             "mobile_no": user.mobile_no,
+#             "email": user.email
+#         }
+        
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         print(f" Unexpected error in staff login: {str(e)}")
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail="Internal server error during login"
+#         )
     
 # @router.post("/login", response_model=dict)
 # def login(user_data: UserLogin, db: Session = Depends(get_db)):
@@ -318,7 +412,7 @@ def verify_otp(
         print(f" OTP verification for mobile: {otp_data.mobile_no}")
         print(f" OTP provided: {otp_data.otp}")
         
-        # Find user by mobile number
+        
         user = db.exec(select(User).where(User.mobile_no == otp_data.mobile_no)).first()
         if not user:
             print(f" User not found for mobile: {otp_data.mobile_no}")
@@ -329,23 +423,23 @@ def verify_otp(
         print(f" OTP Created At: {user.otp_created_at}")
         print(f" OTP Expires At: {user.otp_expires_at}")
         
-        # Verify OTP exists
+        
         if not user.otp_code:
             print(f" No OTP stored for user: {user.mobile_no}")
             raise HTTPException(status_code=400, detail="No OTP found. Please request a new OTP.")
         
-        # Verify OTP matches
+        
         if user.otp_code != otp_data.otp:
             print(f" OTP mismatch. Stored: {user.otp_code}, Provided: {otp_data.otp}")
             raise HTTPException(status_code=400, detail="Invalid OTP")
         
-        # Verify OTP not expired
+       
         from datetime import datetime
         if user.otp_expires_at and user.otp_expires_at < datetime.utcnow():
             print(f" OTP expired. Expires at: {user.otp_expires_at}")
             raise HTTPException(status_code=400, detail="OTP expired")
         
-        # Clear OTP after successful verification
+        
         user.verified_otp = True 
         user.otp_code = None
         user.otp_expires_at = None
@@ -353,7 +447,7 @@ def verify_otp(
         db.add(user)
         db.commit()
         
-        # Generate JWT token
+       
         from core.security import create_access_token
         from datetime import timedelta
         from core.config import settings
@@ -361,7 +455,7 @@ def verify_otp(
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             subject=str(user.user_id),  
-            expires_delta=access_token_expires
+            expires_delta=timedelta(days=1)
         )
         
         print(f" OTP verified successfully for: {user.mobile_no}")
@@ -463,22 +557,22 @@ def resend_otp(user_data: UserLogin, db: Session = Depends(get_db)):
 
         current_time = datetime.utcnow()
 
-        #  Check if user exists
+        
         user = crud_user.get_by_mobile(db, user_data.mobile_no)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Mobile number not registered"
             )
-        #  Ensure account is active
+        
         if user.status != "active":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Account is inactive"
             )
 
-        #  1-minute rate limit for OTP resend
-        COOLDOWN_PERIOD = 180  # seconds
+        
+        COOLDOWN_PERIOD = 180  
         if user.otp_created_at:
             time_since_last_otp = current_time - user.otp_created_at
             if time_since_last_otp < timedelta(seconds=COOLDOWN_PERIOD):
@@ -495,7 +589,7 @@ def resend_otp(user_data: UserLogin, db: Session = Depends(get_db)):
                     }
                 )
 
-        #  Generate and send new OTP
+        
         otp = generate_otp()
         store_otp_in_db(user_data.mobile_no, otp, db)
         send_otp_via_sms(user_data.mobile_no, otp)

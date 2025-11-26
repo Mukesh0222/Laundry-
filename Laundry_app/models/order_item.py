@@ -2,16 +2,19 @@ from sqlmodel import SQLModel, Field, Column, Relationship
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
-from sqlalchemy import UniqueConstraint 
+from sqlalchemy import UniqueConstraint, String
 
 class OrderItemStatus(str, Enum):
     PENDING = "pending"
+    CONFIRMED = "confirmed"
     PROCESSED = "processed"
     WASHED = "washed"
+    READY = "ready" 
     IRONED = "ironed"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     PICKED = "picked"
+    REJECTED = "rejected"
     
     # CANCEL = "cancel"
     # DELETE = "delete"
@@ -31,7 +34,7 @@ class CategoryName(str, Enum):
     OTHERS = "Others"
 
 class ProductName(str, Enum):
-    # Men's Clothing
+    
     T_SHIRT = "T-Shirt"
     SHIRT = "Shirt"
     JEANS = "Jeans"
@@ -43,7 +46,7 @@ class ProductName(str, Enum):
     JACKET = "Jacket"
     SWEATER = "Sweater"
     
-    # Women's Clothing
+    
     SAREE = "Saree"
     KURTI = "Kurti"
     DRESS = "Dress"
@@ -55,7 +58,7 @@ class ProductName(str, Enum):
     DUPATTA = "Dupatta"
     NIGHT_DRESS = "Night Dress"
     
-    # Kids Clothing
+    
     KIDS_TSHIRT = "Kids T-shirt"
     KIDS_SHORTS = "Kids Shorts"
     SCHOOL_UNIFORM = "School Uniform"
@@ -67,7 +70,7 @@ class ProductName(str, Enum):
     KIDS_JACKET = "Kids Jacket"
     KIDS_SWEATER = "Kids Sweater"
     
-    # House Holds
+    
     BEDSHEET = "Bedsheet"
     PILLOW_COVER = "Pillow Cover"
     CURTAIN = "Curtain"
@@ -79,7 +82,7 @@ class ProductName(str, Enum):
     CUSHION_COVER = "Cushion Cover"
     MATTRESS_COVER = "Mattress Cover"
     
-    # Others
+    
     BAG = "Bag"
     CAP = "Cap"
     SCARF = "Scarf"
@@ -102,15 +105,15 @@ class OrderItem(SQLModel, table=True):
     product_name: str = Field()
     quantity: int = Field(default=1)
     service: str = Field()
-    status: OrderItemStatus = Field(default=OrderItemStatus.PROCESSED)
+    status: str = Field(sa_column=Column(String(250)))
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     created_by: Optional[str] = Field(default=None, max_length=150)
     updated_by: Optional[str] = Field(default=None, max_length=150)
 
-    order: Optional["Order"] = Relationship(back_populates="items")  #  OrderItem-Order relationship
+    order: Optional["Order"] = Relationship(back_populates="items") 
 
-    # Add unique constraint to prevent duplicates
+    
     __table_args__ = (
         UniqueConstraint('order_id', 'category_name', 'product_name', name='uq_order_item'),
     )

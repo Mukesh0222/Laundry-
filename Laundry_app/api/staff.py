@@ -3,7 +3,8 @@ from sqlmodel import Session, select
 from typing import List, Optional
 import random
 import string
-from datetime import datetime
+from datetime import datetime, date
+from sqlalchemy import func  
 
 from db.session import get_db
 from models.order import Order, OrderStatus
@@ -16,7 +17,11 @@ from models.address import Address
 
 router = APIRouter()
 
-#  ADD HELPER FUNCTIONS HERE (at the top level)
+
+def get_user_identifier(user: User) -> str:
+    """Get user identifier (mobile_no) for created_by/updated_by fields"""
+    return user.mobile_no or user.name or "Unknown"
+
 def convert_category_name(category):
     """Convert enum category names to display names"""
     if not category:
@@ -28,7 +33,7 @@ def convert_category_name(category):
         'KIDS_CLOTHING': "Kids Clothing",
         'HOUSE_HOLDS': "House Holds",
         'OTHERS': "Others",
-        "Men's Clothing": "Men's Clothing",  # Handle already correct values
+        "Men's Clothing": "Men's Clothing",  
         "Women's Clothing": "Women's Clothing",
         "Kids Clothing": "Kids Clothing",
         "House Holds": "House Holds",
@@ -43,7 +48,7 @@ def convert_product_name(product):
         return "Other"
     
     mapping = {
-        # Men's Clothing
+        
         'T_SHIRT': "T-Shirt",
         'SHIRT': "Shirt", 
         'JEANS': "Jeans",
@@ -55,7 +60,7 @@ def convert_product_name(product):
         'JACKET': "Jacket",
         'SWEATER': "Sweater",
         
-        # Women's Clothing
+        
         'SAREE': "Saree",
         'KURTI': "Kurti",
         'DRESS': "Dress",
@@ -67,7 +72,7 @@ def convert_product_name(product):
         'DUPATTA': "Dupatta",
         'NIGHT_DRESS': "Night Dress",
         
-        # Kids Clothing
+        
         'KIDS_TSHIRT': "Kids T-shirt",
         'KIDS_SHORTS': "Kids Shorts",
         'SCHOOL_UNIFORM': "School Uniform",
@@ -79,7 +84,7 @@ def convert_product_name(product):
         'KIDS_JACKET': "Kids Jacket",
         'KIDS_SWEATER': "Kids Sweater",
         
-        # House Holds
+        
         'BEDSHEET': "Bedsheet",
         'PILLOW_COVER': "Pillow Cover",
         'CURTAIN': "Curtain",
@@ -91,7 +96,7 @@ def convert_product_name(product):
         'CUSHION_COVER': "Cushion Cover",
         'MATTRESS_COVER': "Mattress Cover",
         
-        # Others
+        
         'BAG': "Bag",
         'CAP': "Cap",
         'SCARF': "Scarf",
@@ -108,26 +113,29 @@ def convert_product_name(product):
     return mapping.get(product, "Other")
 
 def convert_order_status(status):
-    """Convert order status to valid enum values"""
+    """Convert order status to valid enum values - SAFE VERSION"""
     if not status:
         return OrderStatus.PENDING
     
-    status_mapping = {
-        'picked': OrderStatus.IN_PROGRESS,
-        'PICKED': OrderStatus.IN_PROGRESS,
-        'pending': OrderStatus.PENDING,
-        'PENDING': OrderStatus.PENDING,
-        'confirmed': OrderStatus.CONFIRMED,
-        'CONFIRMED': OrderStatus.CONFIRMED,
-        'in_progress': OrderStatus.IN_PROGRESS,
-        'IN_PROGRESS': OrderStatus.IN_PROGRESS,
-        'completed': OrderStatus.COMPLETED,
-        'COMPLETED': OrderStatus.COMPLETED,
-        'cancelled': OrderStatus.CANCELLED,
-        'CANCELLED': OrderStatus.CANCELLED
-    }
-    return status_mapping.get(status, OrderStatus.PENDING)
-
+    status_lower = str(status).lower().strip()
+    print(f"DEBUG: Converting status '{status}' to lowercase '{status_lower}'")
+    
+    if status_lower in ['pending', 'PENDING']:
+        return OrderStatus.PENDING
+    elif status_lower in ['confirmed', 'CONFIRMED']:
+        return OrderStatus.CONFIRMED
+    elif status_lower in ['processed', 'PROCESSED', 'in_progress', 'IN_PROGRESS']:
+        return OrderStatus.PROCESSED  
+    elif status_lower in ['picked_up', 'PICKED_UP', 'picked', 'PICKED']:
+        return OrderStatus.PICKED_UP
+    elif status_lower in ['completed', 'COMPLETED', 'delivered', 'DELIVERED']:
+        return OrderStatus.COMPLETED  
+    elif status_lower in ['cancelled', 'CANCELLED']:
+        return OrderStatus.CANCELLED
+    else:
+        print(f"DEBUG: Unknown status '{status_lower}', defaulting to PENDING")
+        return OrderStatus.PENDING
+    
 def convert_service_type(service):
     """Convert service type to valid enum values"""
     if not service:
@@ -142,7 +150,7 @@ def convert_service_type(service):
         'WASH_ONLY': "wash_only",
         'iron_only': "iron_only",
         'IRON_ONLY': "iron_only",
-        'pending': "wash_iron",  # Map invalid values to default
+        'pending': "wash_iron",  
         'PENDING': "wash_iron",
     }
     return service_mapping.get(service, "wash_iron")
@@ -153,10 +161,52 @@ def generate_order_number():
     random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     return f"ORD{date_str}-{random_str}"
 
-def generate_token():
-    """Generate unique token like TK101"""
-    return f"TK{random.randint(100, 999)}"
+def generate_token(db: Session) -> str:
+    """Generate unique Token_no with retry logic"""
+    max_retries = 5
+    for attempt in range(max_retries):
+        date_str = datetime.now().strftime("%Y%m%d")
+        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        token_no = f"ORD{date_str}-{random_str}"
+        
+        existing_order = db.query(Order).filter(Order.Token_no == token_no).first()
+        if not existing_order:
+            return token_no
+        
+        print(f" Token_no {token_no} already exists, retrying... (attempt {attempt + 1})")
+    
 
+    fallback_token = f"ORD{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+    print(f" Using fallback token: {fallback_token}")
+    return fallback_token
+
+def get_created_by_identifier(current_user: User, order_data) -> str:
+    """Get created_by identifier - always use customer details"""
+    print(f" DEBUG get_created_by_identifier:")
+    print(f"   - Current User: {current_user.name} (Role: {current_user.role})")
+    
+    if hasattr(order_data, 'customer_name') and hasattr(order_data, 'customer_mobile'):
+        customer_name = getattr(order_data, 'customer_name', None)
+        customer_mobile = getattr(order_data, 'customer_mobile', None)
+        
+        print(f"   - Order Customer Name: '{customer_name}'")
+        print(f"   - Order Customer Mobile: '{customer_mobile}'")
+        
+        if customer_name and customer_mobile:
+            result = f"Customer: {customer_name} ({customer_mobile})"
+            print(f" Using customer details: {result}")
+            return result
+    
+    customer_id = 99  # Your target customer ID
+    customer = current_user._sa_instance_state.session.get(User, customer_id)
+    if customer:
+        result = f"Customer: {customer.name} ({customer.mobile_no})"
+        print(f"Using target customer details: {result}")
+        return result
+    
+    result = f"Customer: {current_user.name} ({current_user.mobile_no})"
+    print(f" Fallback to current user: {result}")
+    return result
 
 @router.post("/", response_model=OrderResponse)
 def create_order(
@@ -168,20 +218,19 @@ def create_order(
     try:
         print(f" NEW FILE - Staff creating order. Staff ID: {current_user.user_id}")
         
-        # Generate order number and token
-        token_no = generate_token()
+        created_by_identifier = get_created_by_identifier(current_user, order_data)
+        print(f" Final created_by identifier: {created_by_identifier}")
+
+        token_no = generate_token(db)
         
-        #  FIX: USE EXISTING CUSTOMER ONLY - NO NEW CUSTOMER CREATION
-        # Use user ID 99 (python user)
-        customer = db.get(User, 99)
-        
+        customer = db.get(User, 99)        
         if not customer:
-            # If user 99 doesn't exist, use current staff
+            
             customer = current_user
         
         print(f" Using customer: {customer.name} (ID: {customer.user_id})")
         
-        # Create address for the customer
+        
         from models.address import Address
         customer_address = Address(
             user_id=customer.user_id,
@@ -199,15 +248,15 @@ def create_order(
         db.refresh(customer_address)
         print(f" Created address: {customer_address.address_id}")
         
-        # Create order
+        
         db_order = Order(
             user_id=customer.user_id,
             address_id=customer_address.address_id,
             Token_no=token_no,
             service=order_data.service,
             status=OrderStatus.PENDING,
-            created_by=current_user.email,
-            updated_by=current_user.email
+            created_by=created_by_identifier,
+            updated_by=created_by_identifier
         )
         
         db.add(db_order)
@@ -215,22 +264,23 @@ def create_order(
         db.refresh(db_order)
         
         print(f"Order created: {db_order.Token_no}")
+        print(f"Order user_id: {db_order.user_id} (Customer)")
+        print(f"Order created_by: {db_order.created_by} (Customer details)")
         
-        #  FIX: MERGE DUPLICATE ITEMS BEFORE CREATING
         merged_items = {}
         if order_data.items:
             for item_data in order_data.items:
                 key = f"{item_data.category_name}_{item_data.product_name}"
                 if key in merged_items:
-                    # If item already exists, increase quantity
+                    
                     merged_items[key].quantity += item_data.quantity
                 else:
-                    # New item, add to dictionary
+                    
                     merged_items[key] = item_data
         
         print(f" Original items: {len(order_data.items)}, Merged items: {len(merged_items)}")
 
-        # Create order items from merged data
+        
         created_items = []
         for key, item_data in merged_items.items():
             db_item = OrderItem(
@@ -238,7 +288,12 @@ def create_order(
                 category_name=item_data.category_name,
                 product_name=item_data.product_name,
                 quantity=item_data.quantity,
-                service=order_data.service
+                service=order_data.service,
+                status="pending",  
+                created_at=datetime.utcnow(),  
+                updated_at=datetime.utcnow(),  
+                created_by=created_by_identifier,  
+                updated_by=created_by_identifier 
             )
             db.add(db_item)
             created_items.append(db_item)
@@ -248,16 +303,16 @@ def create_order(
             for item in created_items:
                 db.refresh(item)
         
-        # Get user details
+        
         user = db.get(User, db_order.user_id)
         address = db.get(Address, db_order.address_id)
         
-        # Get order items
+        
         order_items = db.exec(
             select(OrderItem).where(OrderItem.order_id == db_order.order_id)
         ).all()
         
-        # Build items response
+        
         items_response = []
         for item in order_items:
             items_response.append({
@@ -274,7 +329,7 @@ def create_order(
                 "updated_by": item.updated_by
             })
         
-        # Build address details
+        
         address_details = None
         if address:
             address_details = {
@@ -286,7 +341,7 @@ def create_order(
                 # "landmark": address.landmark
             }
         
-        # Build complete response
+        
         response_data = {
             "order_id": db_order.order_id,
             "user_id": db_order.user_id,
@@ -298,17 +353,17 @@ def create_order(
             "updated_at": db_order.updated_at,
             "created_by": db_order.created_by,
             "updated_by": db_order.updated_by,
-            # Address fields
+            
             "address_line1": order_data.address_line1,
             "address_line2": order_data.address_line2,
             "city": order_data.city,
             "state": order_data.state,
             "pincode": order_data.pincode,
             # "landmark": order_data.landmark,
-            # User details
+            
             "user_name": user.name if user else None,
             "user_mobile": user.mobile_no if user else None,
-            # Relationships
+            
             "address_details": address_details,
             "items": items_response,
             "order_items": items_response
@@ -323,7 +378,7 @@ def create_order(
         print(f" Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Staff order creation failed: {str(e)}")
 
-#  FIX: GET ORDER WITHOUT RELATIONSHIP ISSUES
+
 @router.get("/{order_id}", response_model=OrderResponse)
 def get_order(
     order_id: int,
@@ -334,24 +389,23 @@ def get_order(
     try:
         print(f"Getting order: {order_id}")
         
-        # Get order
+        
         order = db.get(Order, order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
         
         print(f"Order found - ID: {order.order_id}, service: {order.service}, status: {order.status}")
         
-        #  FIX: MANUALLY LOAD RELATIONSHIPS
-        # Get related data manually
+        
         user = db.get(User, order.user_id)
         address = db.get(Address, order.address_id)
         
-        # Get order items
+        
         order_items = db.exec(
             select(OrderItem).where(OrderItem.order_id == order_id)
         ).all()
         
-        # Build items response
+        
         items_response = []
         for item in order_items:
             items_response.append({
@@ -368,7 +422,7 @@ def get_order(
                 "updated_by": item.updated_by
             })
         
-        # Build address details
+        
         address_details = None
         if address:
             address_details = {
@@ -383,7 +437,7 @@ def get_order(
         order_status = convert_order_status(order.status)
         order_service = convert_service_type(order.service)
 
-        # Build complete response
+        
         response_data = {
             "order_id": order.order_id,
             "user_id": order.user_id,
@@ -395,17 +449,17 @@ def get_order(
             "updated_at": order.updated_at,
             "created_by": order.created_by,
             "updated_by": order.updated_by,
-            # Address fields (use from address if available)
+            
             "address_line1": address.address_line1 if address else "",
             "address_line2": address.address_line2 if address else "",
             "city": address.city if address else "",
             "state": address.state if address else "",
             "pincode": address.pincode if address else "",
             # "landmark": address.landmark if address else "",
-            # User details
+            
             "user_name": user.name if user else None,
             "user_mobile": user.mobile_no if user else None,
-            # Relationships
+            
             "address_details": address_details,
             "items": items_response,
             "order_items": items_response
@@ -419,8 +473,7 @@ def get_order(
         print(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to get order: {str(e)}")
 
-#  FIX: GET ORDERS LIST
-#  COMPLETELY FIXED GET ORDERS ENDPOINT
+
 @router.get("/", response_model=List[OrderResponse])
 def get_orders(
     skip: int = 0,
@@ -436,12 +489,12 @@ def get_orders(
         
         statement = select(Order)
         
-        # Status filter
+        
         if status:
             valid_status = convert_order_status(status)
             statement = statement.where(Order.status == valid_status.value)
         
-        # Search filter
+        
         if search:
             search = f"%{search}%"
             statement = statement.where(Order.Token_no.ilike(search))
@@ -458,16 +511,16 @@ def get_orders(
                 print(f"  Raw service: '{order.service}' (type: {type(order.service).__name__})")
                 print(f"  Raw status: '{order.status}' (type: {type(order.status).__name__})")
                 
-                # Get related data
+                
                 user = db.get(User, order.user_id)
                 address = db.get(Address, order.address_id)
                 
-                # Get order items
+                
                 order_items = db.exec(
                     select(OrderItem).where(OrderItem.order_id == order.order_id)
                 ).all()
                 
-                # Convert order items
+                
                 items_response = []
                 for item in order_items:
                     items_response.append({
@@ -484,7 +537,7 @@ def get_orders(
                         "updated_by": item.updated_by
                     })
                 
-                # Build address details
+                
                 address_details = None
                 if address:
                     address_details = {
@@ -495,21 +548,21 @@ def get_orders(
                         "pincode": address.pincode
                     }
                 
-                # CRITICAL: CONVERT SERVICE AND STATUS SEPARATELY
+                
                 order_service = convert_service_type(order.service)
                 order_status = convert_order_status(order.status)
                 
                 print(f"  Converted service: '{order_service}'")
                 print(f"  Converted status: '{order_status.value}'")
                 
-                # Build response as dictionary
+                
                 response_dict = {
                     "order_id": order.order_id,
                     "user_id": order.user_id,
                     "address_id": order.address_id,
                     "Token_no": order.Token_no,
-                    "service": order_service,  #  This should be a string like "wash_iron"
-                    "status": order_status.value,  #  This should be a string like "pending"
+                    "service": order_service,  
+                    "status": order_status.value,  
                     "created_at": order.created_at,
                     "updated_at": order.updated_at,
                     "created_by": order.created_by,
@@ -526,11 +579,11 @@ def get_orders(
                     "order_items": items_response
                 }
                 
-                # Validate the data before creating OrderResponse
+                
                 print(f"  Final service for response: '{response_dict['service']}'")
                 print(f"  Final status for response: '{response_dict['status']}'")
                 
-                # Create OrderResponse
+                
                 order_response = OrderResponse(**response_dict)
                 orders_response.append(order_response)
                 print(f"   Successfully processed order {order.order_id}")
@@ -551,7 +604,7 @@ def get_orders(
         raise HTTPException(status_code=500, detail=f"Failed to get orders: {str(e)}")
 
 
-# Add this for customers to view their own orders
+
 @router.get("/user/{user_id}/orders", response_model=List[OrderResponse])
 def get_orders_by_user(
     user_id: int,
@@ -559,7 +612,6 @@ def get_orders_by_user(
     limit: int = 100,
     service: Optional[str] = Query(None, description="Filter by service type"),
     status: Optional[str] = Query(None),
-
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_staff_user)
 ):
@@ -567,41 +619,48 @@ def get_orders_by_user(
     try:
         print(f"Staff getting orders for user: {user_id}")
         
-        # Verify user exists
-        user = db.get(User, user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        customer = db.get(User, user_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
         
-        statement = select(Order).where(Order.user_id == user_id)
+        print(f"Customer found: {customer.name} (ID: {customer.user_id}, Mobile: {customer.mobile_no})")
         
+        query = db.query(Order).filter(Order.user_id == user_id)
+
         if service:
             valid_service = convert_service_type(service)
-            statement = statement.where(Order.service == valid_service)
+            query = query.filter(Order.service == valid_service)
             print(f"Filtering by service: {valid_service}")
             
-        # Status filter
         if status:
             valid_status = convert_order_status(status)
-            statement = statement.where(Order.status == valid_status.value)
-        
-        statement = statement.offset(skip).limit(limit).order_by(Order.created_at.desc())
-        orders = db.exec(statement).all()
-        
-        print(f"Found {len(orders)} orders for user {user_id}")
+            query = query.filter(Order.status == valid_status.value)
+            print(f"Filtering by status: {valid_status.value}")
+
+        total_count = query.count()
+        print(f"Total orders found for customer {customer.name}: {total_count}")
+
+        query = query.order_by(Order.created_at.desc())
+        orders = query.offset(skip).limit(limit).all() 
+
+        print(f"Returning {len(orders)} orders for user {user_id} (showing {skip} to {skip + len(orders)})")
         
         orders_response = []
         for order in orders:
             try:
-                # Get related data
-                user = db.get(User, order.user_id)
+                print(f"Processing order {order.order_id} - Status: {order.status}")
+                
+                order_customer = db.get(User, order.user_id)
+                
+               
                 address = db.get(Address, order.address_id)
                 
-                # Get order items
-                order_items = db.exec(
-                    select(OrderItem).where(OrderItem.order_id == order.order_id)
-                ).all()
+              
+                order_items = db.query(OrderItem).filter(OrderItem.order_id == order.order_id).all()
                 
-                # Convert order items
+                print(f"Found {len(order_items)} items for order {order.Token_no}")
+                
+               
                 items_response = []
                 for item in order_items:
                     items_response.append({
@@ -618,7 +677,7 @@ def get_orders_by_user(
                         "updated_by": item.updated_by
                     })
                 
-                # Build address details
+                
                 address_details = None
                 if address:
                     address_details = {
@@ -629,11 +688,11 @@ def get_orders_by_user(
                         "pincode": address.pincode
                     }
                 
-                # Convert service and status
+                
                 order_service = convert_service_type(order.service)
                 order_status = convert_order_status(order.status)
 
-                # Build response
+               
                 response_dict = {
                     "order_id": order.order_id,
                     "user_id": order.user_id,
@@ -650,26 +709,41 @@ def get_orders_by_user(
                     "city": address.city if address else "",
                     "state": address.state if address else "",
                     "pincode": address.pincode if address else "",
-                    "user_name": user.name if user else None,
-                    "user_mobile": user.mobile_no if user else None,
+                    "user_name": order_customer.name if order_customer else None,
+                    "user_mobile": order_customer.mobile_no if order_customer else None,
                     "address_details": address_details,
                     "items": items_response,
                     "order_items": items_response
                 }
                 
+                
                 order_response = OrderResponse(**response_dict)
                 orders_response.append(order_response)
+                print(f"Successfully processed order {order.order_id}")
                 
             except Exception as order_error:
                 print(f"Error processing order {order.order_id}: {str(order_error)}")
+                import traceback
+                print(f"Order error details: {traceback.format_exc()}")
                 continue
         
-        return orders_response
+        print(f"Successfully processed {len(orders_response)} orders out of {len(orders)}")
         
+        if len(orders_response) == 0:
+            print(f" No orders found for customer {customer.name}")
+            return []
+        
+        return orders_response
+    except HTTPException:
+        raise
+      
     except Exception as e:
         print(f"Get user orders error: {str(e)}")
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to get user orders: {str(e)}")
     
+
 #  GET /api/v1/staff/orders - Get all orders with filters
 # @router.get("/", response_model=List[OrderResponse])
 # def get_orders(
@@ -817,7 +891,7 @@ def get_orders_by_user(
 #         print(f" Get order error: {str(e)}")
 #         raise HTTPException(status_code=500, detail=f"Failed to get order: {str(e)}")
 
-#  PUT /api/v1/staff/orders/{order_id} - Update order
+
 @router.put("/{order_id}", response_model=OrderResponse)
 def update_order(
     order_id: int,
@@ -829,18 +903,21 @@ def update_order(
     try:
         print(f" Updating order: {order_id}")
         
+        user_identifier = get_user_identifier(current_user)
+        print(f" User identifier for updated_by: {user_identifier}")
+
         order = db.get(Order, order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
         
-        # Update fields
+        
         update_data = order_update.dict(exclude_unset=True)
 
-        # Convert status if provided
+        
         if 'status' in update_data and update_data['status']:
             update_data['status'] = convert_order_status(update_data['status']).value
         
-        # Convert service if provided  
+         
         if 'service' in update_data and update_data['service']:
             update_data['service'] = convert_service_type(update_data['service'])
         for key, value in update_data.items():
@@ -855,7 +932,7 @@ def update_order(
         
         print(f" Order updated: {order.Token_no}")
 
-        #  RETURN PROPERLY FORMATTED RESPONSE
+        
         user = db.get(User, order.user_id)
         address = db.get(Address, order.address_id)
         order_items = db.exec(select(OrderItem).where(OrderItem.order_id == order_id)).all()
@@ -915,7 +992,7 @@ def update_order(
         raise HTTPException(status_code=500, detail=f"Failed to update order: {str(e)}")
 
 
-#  DELETE /api/v1/staff/orders/{order_id} - Delete order
+
 @router.delete("/{order_id}")
 def delete_order(
     order_id: int,
@@ -930,13 +1007,13 @@ def delete_order(
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
         
-        # Delete associated order items first
+        
         items_statement = select(OrderItem).where(OrderItem.order_id == order_id)
         order_items = db.exec(items_statement).all()
         for item in order_items:
             db.delete(item)
         
-        # Delete order
+        
         db.delete(order)
         db.commit()
         
@@ -948,7 +1025,7 @@ def delete_order(
         print(f" Delete order error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete order: {str(e)}")
 
-#  Quick action endpoints
+
 
 @router.post("/{order_id}/confirm")
 def confirm_order(
@@ -958,13 +1035,15 @@ def confirm_order(
 ):
     """Quick confirm order"""
     try:
+        user_identifier = get_user_identifier(current_user)
+
         order = db.get(Order, order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
         
         order.status = OrderStatus.CONFIRMED
         order.updated_at = datetime.utcnow()
-        order.updated_by = current_user.email
+        order.updated_by = user_identifier 
         
         db.add(order)
         db.commit()
@@ -984,18 +1063,20 @@ def pick_order(
     """Quick pick order with auto token generation"""
     try:
         print(f" Picking order: {order_id}")
+
+        user_identifier = get_user_identifier(current_user)
+        print(f" User identifier for updated_by: {user_identifier}")
         
-        # Get order with relationship
         order = db.get(Order, order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
         
         print(f" Order found - ID: {order.order_id}, Token: {order.Token_no}, Status: {order.status}")
         
-        # Update order status to PICKED
-        order.status = OrderStatus.PICKED
         
-        # Generate token if not exists
+        order.status = OrderStatus.PICKED_UP
+        
+        
         if not order.Token_no:
             new_token = generate_token()
             order.Token_no = new_token
@@ -1004,7 +1085,7 @@ def pick_order(
             print(f" Using existing token: {order.Token_no}")
         
         order.updated_at = datetime.utcnow()
-        order.updated_by = current_user.email
+        order.updated_by = user_identifier 
         
         db.add(order)
         db.commit()
@@ -1034,13 +1115,15 @@ def complete_order(
 ):
     """Quick complete order"""
     try:
+        user_identifier = get_user_identifier(current_user)
+
         order = db.get(Order, order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
         
         order.status = OrderStatus.COMPLETED
         order.updated_at = datetime.utcnow()
-        order.updated_by = current_user.email
+        order.updated_by = user_identifier
         
         db.add(order)
         db.commit()
@@ -1051,7 +1134,36 @@ def complete_order(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to complete order: {str(e)}")
 
-#  Staff dashboard statistics
+
+# @router.get("/dashboard/stats")
+# def get_dashboard_stats(
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_staff_user)
+# ):
+#     """Get dashboard statistics for staff"""
+#     try:
+        
+#         total_orders = db.exec(select(Order)).all()
+        
+        
+#         pending_orders = db.exec(select(Order).where(Order.status == OrderStatus.PENDING)).all()
+#         confirmed_orders = db.exec(select(Order).where(Order.status == OrderStatus.CONFIRMED)).all()
+#         in_progress_orders = db.exec(select(Order).where(Order.status == OrderStatus.IN_PROGRESS)).all()
+#         completed_orders = db.exec(select(Order).where(Order.status == OrderStatus.COMPLETED)).all()
+        
+#         return {
+#             "total_orders": len(total_orders),
+#             "pending_orders": len(pending_orders),
+#             "confirmed_orders": len(confirmed_orders),
+#             "in_progress_orders": len(in_progress_orders),
+#             "completed_orders": len(completed_orders),
+#             "today_orders": len([o for o in total_orders if o.created_at.date() == datetime.utcnow().date()])
+#         }
+        
+#     except Exception as e:
+#         print(f" Dashboard stats error: {str(e)}")
+#         raise HTTPException(status_code=500, detail=f"Failed to get dashboard stats: {str(e)}")
+
 @router.get("/dashboard/stats")
 def get_dashboard_stats(
     db: Session = Depends(get_db),
@@ -1059,24 +1171,51 @@ def get_dashboard_stats(
 ):
     """Get dashboard statistics for staff"""
     try:
-        # Total orders count
-        total_orders = db.exec(select(Order)).all()
+        print("Fetching dashboard statistics with all statuses")
         
-        # Orders by status
-        pending_orders = db.exec(select(Order).where(Order.status == OrderStatus.PENDING)).all()
-        confirmed_orders = db.exec(select(Order).where(Order.status == OrderStatus.CONFIRMED)).all()
-        in_progress_orders = db.exec(select(Order).where(Order.status == OrderStatus.IN_PROGRESS)).all()
-        completed_orders = db.exec(select(Order).where(Order.status == OrderStatus.COMPLETED)).all()
+        # Get all orders count
+        total_orders = db.query(Order).count()
+        
+        # Get orders by each status
+        pending_orders = db.query(Order).filter(Order.status == "pending").count()
+        confirmed_orders = db.query(Order).filter(Order.status == "confirmed").count()
+        picked_up_orders = db.query(Order).filter(Order.status == "picked_up").count()
+        ready_to_pick_orders = db.query(Order).filter(Order.status == "ready").count()  # Assuming 'ready' means ready to pick
+        in_progress_orders = db.query(Order).filter(Order.status == "in_progress").count()
+        completed_orders = db.query(Order).filter(Order.status == "completed").count()
+        delivered_orders = db.query(Order).filter(Order.status == "delivered").count()
+        cancelled_orders = db.query(Order).filter(Order.status == "cancelled").count()
+        rejected_orders = db.query(Order).filter(Order.status == "rejected").count()
+        
+        # Today's orders
+        today = datetime.utcnow().date()
+        today_orders = db.query(Order).filter(
+            func.date(Order.created_at) == today
+        ).count()
+        
+        # Calculate ready to pick (confirmed orders that are not picked up yet)
+        # This is a business logic calculation
+        ready_to_pick_calculated = confirmed_orders - picked_up_orders
+        if ready_to_pick_calculated < 0:
+            ready_to_pick_calculated = 0
         
         return {
-            "total_orders": len(total_orders),
-            "pending_orders": len(pending_orders),
-            "confirmed_orders": len(confirmed_orders),
-            "in_progress_orders": len(in_progress_orders),
-            "completed_orders": len(completed_orders),
-            "today_orders": len([o for o in total_orders if o.created_at.date() == datetime.utcnow().date()])
+            "total_orders": total_orders,
+            "pending_orders": pending_orders,
+            "confirmed_orders": confirmed_orders,
+            "picked_up_orders": picked_up_orders,
+            "ready_to_pick_orders": ready_to_pick_orders,  # Direct from database
+            "ready_to_pick_calculated": ready_to_pick_calculated,  # Calculated (confirmed - picked_up)
+            "in_progress_orders": in_progress_orders,
+            "completed_orders": completed_orders,
+            "delivered_orders": delivered_orders,
+            "cancelled_orders": cancelled_orders,
+            "rejected_orders": rejected_orders,
+            "today_orders": today_orders
         }
         
     except Exception as e:
-        print(f" Dashboard stats error: {str(e)}")
+        print(f"Dashboard stats error: {str(e)}")
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard stats: {str(e)}")

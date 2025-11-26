@@ -9,11 +9,24 @@ class CRUDUser:
     # def get_by_mobile(self, db: Session, mobile_no: str):
     #     return db.exec(select(User).where(User.mobile_no == mobile_no)).first()
     
-    def get_by_mobile(self, db: Session, mobile_no: str) -> Optional[User]:
-        """Get user by mobile number."""
-        statement = select(User).where(User.mobile_no == mobile_no)
-        return db.exec(statement).first()
-    
+    def get_by_mobile(self, db: Session, mobile_no: str):
+        """Get user by mobile number with status check"""
+        print(f" Getting user by mobile: {mobile_no}")
+        
+        user = db.query(User).filter(User.mobile_no == mobile_no).first()
+        
+        if user:
+            print(f" User found: {user.user_id}, Status: {user.status}")
+            
+            if user.status != "active":
+                print(f" User is inactive. Status: {user.status}")
+                return None
+                
+            return user
+        else:
+            print(f" User not found with mobile: {mobile_no}")
+            return None
+        
     def get_by_email(self, db: Session, email: str) -> Optional[User]:
         """Get user by email"""
         statement = select(User).where(User.email == email)
@@ -36,7 +49,7 @@ class CRUDUser:
             role = user_in.get("role", "CUSTOMER")
             status = user_in.get("status", "active")
         else:
-            # It's a UserCreate object
+            
             mobile_no = user_in.mobile_no
             email = user_in.email
             name = user_in.name
@@ -44,21 +57,21 @@ class CRUDUser:
             role = user_in.role
             status = user_in.status
 
-        # Check if mobile number already exists
+        
         existing_user = self.get_by_mobile(db, mobile_no)
         if existing_user:
             raise ValueError("Mobile number already registered")
         
-        # Check if email already exists (if provided)
+        
         if email:
             existing_email = self.get_by_email(db, email)
             if existing_email:
                 raise ValueError("Email already registered")
         
-        # Hash the password
+        
         hashed_password = get_password_hash(password)
         
-        # Create user
+        
         db_user = User(
             name=name,
             email=email,
@@ -81,12 +94,12 @@ class CRUDUser:
             if not user:
                 return None
             
-            # Update each field from the dictionary
+            
             for field, value in update_data.items():
                 if hasattr(user, field) and value is not None:
                     setattr(user, field, value)
             
-            # Update timestamp
+            
             user.updated_at = datetime.utcnow()
             
             db.add(user)
@@ -103,14 +116,14 @@ class CRUDUser:
         """Authenticate user by name and password"""
         print(f" Authenticating user by name: {name}")
         
-        # Case-insensitive search
+        
         user = db.query(User).filter(User.name.ilike(name)).first()
         
         if user:
             print(f" User found: {user.user_id}")
             print(f" Verifying password...")
             
-            # Verify password
+           
             if verify_password(password, user.password):
                 print(f" Password verified successfully")
                 return user
@@ -123,15 +136,23 @@ class CRUDUser:
 
     def authenticate_by_mobile(self, db: Session, mobile_no: str, password: str):
         user = db.query(User).filter(User.mobile_no == mobile_no).first()
-        if not user:
+        if user:
+            print(f" User found: {user.user_id}, Status: {user.status}")
+            print("DB password:", user.password)
+            print("Input password:", password)
+            
+            if user.status != "active":
+                print(f" User is inactive. Status: {user.status}")
+                return None
+            
+            if not verify_password(password, user.password):
+                print("Password verification failed")
+                return None
+                
+            return user
+        else:
             print("User not found")
             return None
-        print("DB password:", user.password)
-        print("Input password:", password)
-        if not verify_password(password, user.password):
-            print("Password verification failed")
-            return None
-        return user
 
     
     def update_otp(self, db: Session, mobile_no: str, otp: str) -> Optional[User]:

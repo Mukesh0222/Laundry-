@@ -19,11 +19,11 @@ logger = logging.getLogger(__name__)
 
 def get_valid_service_types():
     """Get valid service types from database ENUM"""
-    # Check your database schema
-    valid_services = ['pickup', 'delivery', 'both']  # Example - adjust based on your DB
+    
+    valid_services = ['pickup', 'delivery', 'both']  
     return valid_services
 
-# Add validation to your endpoint
+
 @router.post("/")
 def create_pickup_delivery(
     pickup_data: PickupDeliveryCreate,
@@ -34,10 +34,10 @@ def create_pickup_delivery(
         print(f" ENDPOINT REACHED!")
         print(f" User: {current_user.name} ID: {current_user.user_id}")
         
-        #  PRINT RECEIVED DATA
+       
         print(f" Received data: {pickup_data.dict()}")
         
-        #  CHECK IF ORDER EXISTS
+        
         order = db.get(Order, pickup_data.order_id)
         if not order:
             raise HTTPException(
@@ -46,7 +46,7 @@ def create_pickup_delivery(
             )
         print(f" Order found: {order.order_id}")
         
-        #  CREATE PICKUP/DELIVERY RECORD
+        
         db_pickup = PickupDelivery(**pickup_data.dict())
         print(f" PickupDelivery object created")
         
@@ -91,7 +91,7 @@ def read_pickups_deliveries(
     if current_user.role in ["staff", "admin"]:
         statement = select(PickupDelivery).offset(skip).limit(limit)
     else:
-        # Users can only see pickup/deliveries for their own orders
+        
         from models.order import Order
         statement = select(PickupDelivery).join(Order).where(Order.user_id == current_user.user_id).offset(skip).limit(limit)
     
@@ -108,14 +108,14 @@ def read_pickup_delivery(
     if not pd:
         raise HTTPException(status_code=404, detail="Pickup/Delivery not found")
     
-    # Check if user has access
+    
     if current_user.role not in ["staff", "admin"]:
         from models.order import Order
         order = db.get(Order, pd.order_id)
         if order.user_id != current_user.user_id:
             raise HTTPException(status_code=403, detail="Not enough permissions")
     
-    # Return as dict to avoid validation issues
+    
     return {
         "id": pd.id,
         "order_id": pd.order_id,
@@ -146,26 +146,26 @@ def update_pickup_delivery(
         print(f"Updating pickup/delivery {pd_id}")
         print(f"Update data: {pd_update.dict(exclude_unset=True)}")
 
-        # Convert update data to dict and handle enum values
+        
         update_data = pd_update.dict(exclude_unset=True)
         
-        # Convert ServiceStatus enum to string if present
+       
         safe_fields = ['notes', 'status']
         
-        # Update only the provided fields
+        
         for key in safe_fields:
             if key in update_data:
                 value = update_data[key]
                 print(f"Setting {key} = {value}")
                 setattr(pd, key, value)
         
-        # Skip datetime fields for now
+        
         print("Skipping datetime fields (actual_date, pickup_at, picked_at, delivered_at) until database schema is fixed")
         
         db.add(pd)
         db.commit()
         
-        # Return without refresh to avoid enum issues
+        
         return {
             "success": True,
             "message": "Pickup/delivery updated successfully",

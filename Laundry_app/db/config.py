@@ -13,10 +13,10 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-#  Print loaded .env values for debugging
+
 print("\n[DEBUG] Loaded .env values:")
 print("MYSQL_USER:", settings.MYSQL_USER)
-print("MYSQL_PASSWORD:", settings.MYSQL_PASSWORD)  # <-- shows actual password
+print("MYSQL_PASSWORD:", settings.MYSQL_PASSWORD)  
 print("MYSQL_HOST:", settings.MYSQL_HOST)
 print("MYSQL_PORT:", settings.MYSQL_PORT)
 print("MYSQL_DATABASE:", settings.MYSQL_DATABASE)
