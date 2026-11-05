@@ -110,7 +110,7 @@ def get_addresses_by_user_id(
         # Use db.query() instead of db.exec()
         addresses = db.query(Address).filter(Address.user_id == user_id).all()
         
-        print(f" Found {len(addresses)} addresses for user {user_id}")
+        print(f" Found {len(addresses)} addresses the user {user_id}")
         return addresses
         
     except HTTPException:
