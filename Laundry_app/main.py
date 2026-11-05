@@ -30,6 +30,9 @@ from api.order_archive import router as order_archive_router
 from api.service import router as service_router
 from api.feedback import router as feedback_router
 
+
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create database tables on startup

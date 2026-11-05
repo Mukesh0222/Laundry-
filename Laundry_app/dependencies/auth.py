@@ -695,6 +695,7 @@ def get_current_staff_user(current_user: User = Depends(get_current_user)) -> Us
     print(f" [STAFF-AUTH] User role: '{current_user.role}'")
     print(f" [STAFF-AUTH] User status: '{current_user.status}'")
     print(f" [STAFF-AUTH] Allowed roles: ['staff', 'admin']")
+    print(f" [STAFF-AUTH] Allowed roles: ['staff']")
     
     # Check if role is in allowed list
     if current_user.role.lower() not in ["staff", "admin"]:

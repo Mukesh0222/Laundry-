@@ -14,7 +14,7 @@ from core.security import create_access_token
 
 router = APIRouter()
 
-print(" DEBUG: auth.py loaded successfully")
+# print(" DEBUG: auth.py loaded successfully")
 
 @router.post("/login", response_model=dict)
 def login(user_data: UserLogin, db: Session = Depends(get_db)):

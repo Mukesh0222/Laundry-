@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 from typing import List
 
+
 from db.session import get_db
 from models.address import Address
 from schemas.address import AddressCreate, AddressResponse, AddressUpdate
