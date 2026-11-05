@@ -12,7 +12,7 @@ class Bulk9OTPService:
     
     def generate_otp(self):
         
-        return str(random.randint(100000, 999999))
+        return str(random.randint(1000, 9999))
     
     def send_otp(self, mobile_number, customer_name=""):
         
